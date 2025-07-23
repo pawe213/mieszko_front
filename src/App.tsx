@@ -1,27 +1,35 @@
 // frontend/src/App.tsx
-import { useEffect, useState } from "react";
+import React, { useState } from 'react';
+import PhoneDutyScheduler from './phone_duty_scheduler';
+import Login from './Login';
 
 function App() {
-  const [slots, setSlots] = useState([]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  useEffect(() => {
-    fetch("https://calendar-api-799156456450.europe-west1.run.app/slots")
-      .then(res => res.json())
-      .then(data => setSlots(data));
-  }, []);
-
-  const book = () => {
-    fetch("https://calendar-api-799156456450.europe-west1.run.app/book", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: "2025-07-14" })
-    }).then(() => alert("Booked!"));
+  const handleLoginSuccess = () => {
+    setIsLoggedIn(true);
   };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+  };
+
+  if (!isLoggedIn) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div>
-      <h1>Book a Slot</h1>
-      <button onClick={book}>Book 14 July</button>
+      <div className="bg-white shadow-sm border-b border-gray-200 px-4 py-2 flex justify-between items-center">
+        <h1 className="text-lg font-semibold text-gray-900">Phone Duty Scheduler</h1>
+        <button
+          onClick={handleLogout}
+          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+        >
+          Logout
+        </button>
+      </div>
+      <PhoneDutyScheduler />
     </div>
   );
 }
