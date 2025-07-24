@@ -1,31 +1,95 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Phone, Bell, Users, Settings, Send, Eye, AlertCircle } from 'lucide-react';
-
-interface Schedule {
-  phone: string;
-  name: string;
-  date: string;
-}
-
-interface ReminderSettings {
-  enabled: boolean;
-  hoursBefore: number;
-  webhookUrl: string;
-}
+import { apiService, Schedule, ReminderSettings } from './services/apiService';
 
 const PhoneDutyScheduler = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [schedules, setSchedules] = useState<Record<string, Schedule>>({});
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [employeeName, setEmployeeName] = useState('');
   const [showApiPanel, setShowApiPanel] = useState(false);
   const [reminderSettings, setReminderSettings] = useState<ReminderSettings>({
     enabled: true,
-    hoursBefore: 2,
-    webhookUrl: ''
+    hours_before: 2,
+    webhook_url: ''
   });
   const [apiResponse, setApiResponse] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
+
+  // Load schedules from Firestore on component mount
+  useEffect(() => {
+    loadSchedulesFromFirestore();
+    checkApiConnection();
+  }, []);
+
+  const checkApiConnection = async () => {
+    try {
+      setConnectionStatus('checking');
+      await apiService.healthCheck();
+      setConnectionStatus('connected');
+    } catch (error) {
+      console.error('API connection failed:', error);
+      setConnectionStatus('disconnected');
+    }
+  };
+
+  const loadSchedulesFromFirestore = async () => {
+    try {
+      setIsLoading(true);
+      const response = await apiService.getAllSchedules();
+      if (response.success && response.data) {
+        setSchedules(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load schedules from Firestore:', error);
+      // Fallback to localStorage if available
+      const savedSchedules = localStorage.getItem('phone-duty-schedules');
+      if (savedSchedules) {
+        setSchedules(JSON.parse(savedSchedules));
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveScheduleToFirestore = async (schedule: Schedule) => {
+    try {
+      const response = await apiService.createSchedule(schedule);
+      return response.success;
+    } catch (error) {
+      console.error('Failed to save schedule to Firestore:', error);
+      return false;
+    }
+  };
+
+  const updateScheduleInFirestore = async (date: string, schedule: Omit<Schedule, 'date'>) => {
+    try {
+      const response = await apiService.updateSchedule(date, schedule);
+      return response.success;
+    } catch (error) {
+      console.error('Failed to update schedule in Firestore:', error);
+      return false;
+    }
+  };
+
+  const deleteScheduleFromFirestore = async (date: string) => {
+    try {
+      const response = await apiService.deleteSchedule(date);
+      return response.success;
+    } catch (error) {
+      console.error('Failed to delete schedule from Firestore:', error);
+      return false;
+    }
+  };
+
+  // Save to localStorage as backup
+  useEffect(() => {
+    localStorage.setItem('phone-duty-schedules', JSON.stringify(schedules));
+  }, [schedules]);
 
   // Generate calendar days for current month
   const generateCalendarDays = () => {
@@ -48,7 +112,11 @@ const PhoneDutyScheduler = () => {
   };
 
   const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
+    // Use local timezone to avoid date shifting issues
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const isToday = (date: Date): boolean => {
@@ -65,45 +133,168 @@ const PhoneDutyScheduler = () => {
   };
 
   const handleDateClick = (date: Date) => {
-    setSelectedDate(date);
-    const schedule = schedules[formatDate(date)];
-    if (schedule) {
-      setPhoneNumber(schedule.phone);
-      setEmployeeName(schedule.name);
+    const dateKey = formatDate(date);
+    
+    if (multiSelectMode) {
+      const newSelectedDates = new Set(selectedDates);
+      if (newSelectedDates.has(dateKey)) {
+        newSelectedDates.delete(dateKey);
+      } else {
+        newSelectedDates.add(dateKey);
+      }
+      setSelectedDates(newSelectedDates);
+      
+      // If no dates selected, clear form
+      if (newSelectedDates.size === 0) {
+        setPhoneNumber('');
+        setEmployeeName('');
+      }
     } else {
-      setPhoneNumber('');
-      setEmployeeName('');
+      setSelectedDate(date);
+      const schedule = schedules[dateKey];
+      if (schedule) {
+        setPhoneNumber(schedule.phone);
+        setEmployeeName(schedule.name);
+      } else {
+        setPhoneNumber('');
+        setEmployeeName('');
+      }
     }
   };
 
-  const handleSaveSchedule = () => {
-    if (selectedDate && phoneNumber && employeeName) {
-      const dateKey = formatDate(selectedDate);
-      setSchedules(prev => ({
-        ...prev,
-        [dateKey]: {
-          phone: phoneNumber,
-          name: employeeName,
-          date: dateKey
+  const handleSaveSchedule = async () => {
+    if (phoneNumber && employeeName) {
+      setIsLoading(true);
+      try {
+        if (multiSelectMode && selectedDates.size > 0) {
+          // Save schedule for all selected dates
+          const savePromises = Array.from(selectedDates).map(async (dateKey) => {
+            const schedule: Schedule = {
+              phone: phoneNumber,
+              name: employeeName,
+              date: dateKey
+            };
+            
+            const existingSchedule = schedules[dateKey];
+            if (existingSchedule) {
+              return await updateScheduleInFirestore(dateKey, { phone: phoneNumber, name: employeeName });
+            } else {
+              return await saveScheduleToFirestore(schedule);
+            }
+          });
+          
+          const results = await Promise.all(savePromises);
+          const allSuccessful = results.every(result => result);
+          
+          if (allSuccessful) {
+            setSchedules(prev => {
+              const newSchedules = { ...prev };
+              selectedDates.forEach(dateKey => {
+                newSchedules[dateKey] = {
+                  phone: phoneNumber,
+                  name: employeeName,
+                  date: dateKey
+                };
+              });
+              return newSchedules;
+            });
+          } else {
+            alert('Some schedules failed to save. Please try again.');
+          }
+          
+          setSelectedDates(new Set());
+        } else if (!multiSelectMode && selectedDate) {
+          // Save schedule for single selected date
+          const dateKey = formatDate(selectedDate);
+          const schedule: Schedule = {
+            phone: phoneNumber,
+            name: employeeName,
+            date: dateKey
+          };
+          
+          const existingSchedule = schedules[dateKey];
+          let success;
+          
+          if (existingSchedule) {
+            success = await updateScheduleInFirestore(dateKey, { phone: phoneNumber, name: employeeName });
+          } else {
+            success = await saveScheduleToFirestore(schedule);
+          }
+          
+          if (success) {
+            setSchedules(prev => ({
+              ...prev,
+              [dateKey]: schedule
+            }));
+          } else {
+            alert('Failed to save schedule. Please try again.');
+          }
+          
+          setSelectedDate(null);
         }
-      }));
-      setSelectedDate(null);
-      setPhoneNumber('');
-      setEmployeeName('');
+        setPhoneNumber('');
+        setEmployeeName('');
+      } catch (error) {
+        console.error('Error saving schedule:', error);
+        alert('Failed to save schedule. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
-  const handleDeleteSchedule = () => {
-    if (selectedDate) {
-      const dateKey = formatDate(selectedDate);
-      setSchedules(prev => {
-        const newSchedules = { ...prev };
-        delete newSchedules[dateKey];
-        return newSchedules;
-      });
-      setSelectedDate(null);
+  const handleDeleteSchedule = async () => {
+    setIsLoading(true);
+    try {
+      if (multiSelectMode && selectedDates.size > 0) {
+        // Delete schedules for all selected dates
+        const deletePromises = Array.from(selectedDates).map(dateKey => 
+          schedules[dateKey] ? deleteScheduleFromFirestore(dateKey) : Promise.resolve(true)
+        );
+        
+        const results = await Promise.all(deletePromises);
+        const allSuccessful = results.every(result => result);
+        
+        if (allSuccessful) {
+          setSchedules(prev => {
+            const newSchedules = { ...prev };
+            selectedDates.forEach(dateKey => {
+              delete newSchedules[dateKey];
+            });
+            return newSchedules;
+          });
+        } else {
+          alert('Some schedules failed to delete. Please try again.');
+        }
+        
+        setSelectedDates(new Set());
+      } else if (!multiSelectMode && selectedDate) {
+        // Delete schedule for single selected date
+        const dateKey = formatDate(selectedDate);
+        
+        if (schedules[dateKey]) {
+          const success = await deleteScheduleFromFirestore(dateKey);
+          
+          if (success) {
+            setSchedules(prev => {
+              const newSchedules = { ...prev };
+              delete newSchedules[dateKey];
+              return newSchedules;
+            });
+          } else {
+            alert('Failed to delete schedule. Please try again.');
+          }
+        }
+        
+        setSelectedDate(null);
+      }
       setPhoneNumber('');
       setEmployeeName('');
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      alert('Failed to delete schedule. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -113,6 +304,22 @@ const PhoneDutyScheduler = () => {
       newDate.setMonth(newDate.getMonth() + direction);
       return newDate;
     });
+  };
+
+  const toggleMultiSelectMode = () => {
+    setMultiSelectMode(prev => !prev);
+    // Clear all selections when switching modes
+    setSelectedDate(null);
+    setSelectedDates(new Set());
+    setPhoneNumber('');
+    setEmployeeName('');
+  };
+
+  const clearAllSelections = () => {
+    setSelectedDate(null);
+    setSelectedDates(new Set());
+    setPhoneNumber('');
+    setEmployeeName('');
   };
 
   // API Functions
@@ -143,7 +350,7 @@ const PhoneDutyScheduler = () => {
       sentAt: new Date().toISOString()
     };
     
-    if (reminderSettings.webhookUrl) {
+    if (reminderSettings.webhook_url) {
       await simulateWebhook(reminderData);
     }
   };
@@ -171,6 +378,28 @@ const PhoneDutyScheduler = () => {
               </div>
             </div>
             <div className="flex space-x-2">
+              {/* Connection Status Indicator */}
+              <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm ${
+                connectionStatus === 'connected' 
+                  ? 'bg-green-100 text-green-800' 
+                  : connectionStatus === 'disconnected'
+                  ? 'bg-red-100 text-red-800'
+                  : 'bg-yellow-100 text-yellow-800'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  connectionStatus === 'connected' 
+                    ? 'bg-green-500' 
+                    : connectionStatus === 'disconnected'
+                    ? 'bg-red-500'
+                    : 'bg-yellow-500'
+                }`}></div>
+                <span>
+                  {connectionStatus === 'connected' ? 'Connected' 
+                   : connectionStatus === 'disconnected' ? 'Offline' 
+                   : 'Connecting...'}
+                </span>
+              </div>
+              
               <button
                 onClick={() => setShowApiPanel(!showApiPanel)}
                 className="flex items-center space-x-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
@@ -204,6 +433,36 @@ const PhoneDutyScheduler = () => {
               </button>
             </div>
 
+            {/* Mode Toggle */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={toggleMultiSelectMode}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                    multiSelectMode 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  <Users className="h-4 w-4" />
+                  <span>{multiSelectMode ? 'Multi-Select Mode' : 'Single-Select Mode'}</span>
+                </button>
+                {(selectedDate || selectedDates.size > 0) && (
+                  <button
+                    onClick={clearAllSelections}
+                    className="px-3 py-1 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    Clear Selection
+                  </button>
+                )}
+              </div>
+              {multiSelectMode && selectedDates.size > 0 && (
+                <span className="text-sm text-gray-600">
+                  {selectedDates.size} day{selectedDates.size !== 1 ? 's' : ''} selected
+                </span>
+              )}
+            </div>
+
             {/* Calendar Grid */}
             <div className="grid grid-cols-7 gap-1 mb-4">
               {dayNames.map(day => (
@@ -216,6 +475,11 @@ const PhoneDutyScheduler = () => {
             <div className="grid grid-cols-7 gap-1">
               {days.map((date, index) => {
                 const schedule = hasSchedule(date);
+                const dateKey = formatDate(date);
+                const isSelected = multiSelectMode 
+                  ? selectedDates.has(dateKey)
+                  : selectedDate && formatDate(selectedDate) === dateKey;
+                
                 return (
                   <div
                     key={index}
@@ -224,12 +488,20 @@ const PhoneDutyScheduler = () => {
                       p-3 min-h-[80px] border cursor-pointer transition-all duration-200
                       ${isCurrentMonth(date) ? 'bg-white' : 'bg-gray-50 text-gray-400'}
                       ${isToday(date) ? 'ring-2 ring-blue-500' : ''}
-                      ${selectedDate && formatDate(selectedDate) === formatDate(date) ? 'bg-blue-100 ring-2 ring-blue-300' : ''}
+                      ${isSelected ? 'bg-blue-100 ring-2 ring-blue-300' : ''}
                       ${schedule ? 'bg-green-50 border-green-200' : 'border-gray-200'}
                       hover:bg-gray-50 hover:shadow-md rounded-lg
+                      ${multiSelectMode && isSelected ? 'bg-blue-200 border-blue-400' : ''}
                     `}
                   >
-                    <div className="font-semibold">{date.getDate()}</div>
+                    <div className="font-semibold flex justify-between items-center">
+                      <span>{date.getDate()}</span>
+                      {multiSelectMode && isSelected && (
+                        <div className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
+                          <span className="text-white text-xs">✓</span>
+                        </div>
+                      )}
+                    </div>
                     {schedule && (
                       <div className="mt-1">
                         <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
@@ -246,11 +518,28 @@ const PhoneDutyScheduler = () => {
             </div>
 
             {/* Schedule Form */}
-            {selectedDate && (
+            {((multiSelectMode && selectedDates.size > 0) || (!multiSelectMode && selectedDate)) && (
               <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                 <h3 className="font-semibold mb-3">
-                  Schedule for {selectedDate.toLocaleDateString()}
+                  {multiSelectMode 
+                    ? `Schedule for ${selectedDates.size} selected day${selectedDates.size !== 1 ? 's' : ''}`
+                    : `Schedule for ${selectedDate?.toLocaleDateString()}`
+                  }
                 </h3>
+                
+                {multiSelectMode && selectedDates.size > 0 && (
+                  <div className="mb-3 p-2 bg-blue-50 rounded-md">
+                    <p className="text-sm text-blue-800 font-medium mb-1">Selected dates:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {Array.from(selectedDates).map(dateKey => (
+                        <span key={dateKey} className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                          {new Date(dateKey).toLocaleDateString()}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">Employee Name</label>
@@ -276,20 +565,23 @@ const PhoneDutyScheduler = () => {
                 <div className="flex space-x-2 mt-4">
                   <button
                     onClick={handleSaveSchedule}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                    disabled={isLoading}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Schedule
+                    {isLoading ? 'Saving...' : multiSelectMode ? `Save Schedule for ${selectedDates.size} Day${selectedDates.size !== 1 ? 's' : ''}` : 'Save Schedule'}
                   </button>
-                  {hasSchedule(selectedDate) && (
+                  {((multiSelectMode && Array.from(selectedDates).some(dateKey => schedules[dateKey])) || 
+                    (!multiSelectMode && selectedDate && hasSchedule(selectedDate))) && (
                     <button
                       onClick={handleDeleteSchedule}
-                      className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+                      disabled={isLoading}
+                      className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Delete Schedule
+                      {isLoading ? 'Deleting...' : multiSelectMode ? 'Delete Selected Schedules' : 'Delete Schedule'}
                     </button>
                   )}
                   <button
-                    onClick={() => setSelectedDate(null)}
+                    onClick={clearAllSelections}
                     className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors"
                   >
                     Cancel
@@ -327,8 +619,8 @@ const PhoneDutyScheduler = () => {
                     <label className="block text-sm font-medium mb-1">Hours before duty</label>
                     <input
                       type="number"
-                      value={reminderSettings.hoursBefore}
-                      onChange={(e) => setReminderSettings(prev => ({...prev, hoursBefore: parseInt(e.target.value)}))}
+                      value={reminderSettings.hours_before}
+                      onChange={(e) => setReminderSettings(prev => ({...prev, hours_before: parseInt(e.target.value)}))}
                       className="w-full p-2 border border-gray-300 rounded-md text-sm"
                       min="1"
                       max="24"
@@ -338,8 +630,8 @@ const PhoneDutyScheduler = () => {
                     <label className="block text-sm font-medium mb-1">Webhook URL</label>
                     <input
                       type="url"
-                      value={reminderSettings.webhookUrl}
-                      onChange={(e) => setReminderSettings(prev => ({...prev, webhookUrl: e.target.value}))}
+                      value={reminderSettings.webhook_url}
+                      onChange={(e) => setReminderSettings(prev => ({...prev, webhook_url: e.target.value}))}
                       className="w-full p-2 border border-gray-300 rounded-md text-sm"
                       placeholder="https://your-webhook.com/endpoint"
                     />
