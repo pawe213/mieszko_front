@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Phone, Bell, Users, Settings, Send, Eye, AlertCircle } from 'lucide-react';
-import { apiService, Schedule, ReminderSettings } from './services/apiService';
+import { apiService, Schedule, ReminderSettings, User } from './services/apiService';
 
-const PhoneDutyScheduler = () => {
+interface PhoneDutySchedulerProps {
+  currentUser?: User | null;
+}
+
+const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [schedules, setSchedules] = useState<Record<string, Schedule>>({});
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -163,7 +167,7 @@ const PhoneDutyScheduler = () => {
   };
 
   const handleSaveSchedule = async () => {
-    if (phoneNumber && employeeName) {
+    if (employeeName && /^\d{9}$/.test(phoneNumber)) {
       setIsLoading(true);
       try {
         if (multiSelectMode && selectedDates.size > 0) {
@@ -240,6 +244,8 @@ const PhoneDutyScheduler = () => {
       } finally {
         setIsLoading(false);
       }
+    } else {
+      alert('Numer telefonu musi składać się z dokładnie 9 cyfr.');
     }
   };
 
@@ -373,8 +379,8 @@ const PhoneDutyScheduler = () => {
             <div className="flex items-center space-x-3">
               <Phone className="h-8 w-8" />
               <div>
-                <h1 className="text-2xl font-bold">Phone Duty Scheduler</h1>
-                <p className="text-blue-100">Manage night duty phone assignments</p>
+                <h1 className="text-2xl font-bold">Dyżury Telefoniczne</h1>
+                <p className="text-blue-100">Zarządzaj przydziałami telefonów dyżurnych</p>
               </div>
             </div>
             <div className="flex space-x-2">
@@ -394,19 +400,21 @@ const PhoneDutyScheduler = () => {
                     : 'bg-yellow-500'
                 }`}></div>
                 <span>
-                  {connectionStatus === 'connected' ? 'Connected' 
+                  {connectionStatus === 'connected' ? 'Połączono' 
                    : connectionStatus === 'disconnected' ? 'Offline' 
-                   : 'Connecting...'}
+                   : 'Łączenie...'}
                 </span>
               </div>
               
-              <button
-                onClick={() => setShowApiPanel(!showApiPanel)}
-                className="flex items-center space-x-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
-              >
-                <Settings className="h-4 w-4" />
-                <span>API & Settings</span>
-              </button>
+              {currentUser?.role === 'admin' && (
+                <button
+                  onClick={() => setShowApiPanel(!showApiPanel)}
+                  className="flex items-center space-x-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
+                >
+                  <Settings className="h-4 w-4" />
+                  <span>API i Ustawienia</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -445,20 +453,20 @@ const PhoneDutyScheduler = () => {
                   }`}
                 >
                   <Users className="h-4 w-4" />
-                  <span>{multiSelectMode ? 'Multi-Select Mode' : 'Single-Select Mode'}</span>
+                  <span>{multiSelectMode ? 'Tryb wielokrotnego wyboru' : 'Tryb pojedynczego wyboru'}</span>
                 </button>
                 {(selectedDate || selectedDates.size > 0) && (
                   <button
                     onClick={clearAllSelections}
                     className="px-3 py-1 text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-md transition-colors"
                   >
-                    Clear Selection
+                    Wyczyść wybór
                   </button>
                 )}
               </div>
               {multiSelectMode && selectedDates.size > 0 && (
                 <span className="text-sm text-gray-600">
-                  {selectedDates.size} day{selectedDates.size !== 1 ? 's' : ''} selected
+                  Wybrano dni: {selectedDates.size}
                 </span>
               )}
             </div>
@@ -522,14 +530,14 @@ const PhoneDutyScheduler = () => {
               <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                 <h3 className="font-semibold mb-3">
                   {multiSelectMode 
-                    ? `Schedule for ${selectedDates.size} selected day${selectedDates.size !== 1 ? 's' : ''}`
-                    : `Schedule for ${selectedDate?.toLocaleDateString()}`
+                    ? `Grafik dla ${selectedDates.size} wybranych dni`
+                    : `Grafik dla ${selectedDate?.toLocaleDateString()}`
                   }
                 </h3>
                 
                 {multiSelectMode && selectedDates.size > 0 && (
                   <div className="mb-3 p-2 bg-blue-50 rounded-md">
-                    <p className="text-sm text-blue-800 font-medium mb-1">Selected dates:</p>
+                    <p className="text-sm text-blue-800 font-medium mb-1">Wybrane daty:</p>
                     <div className="flex flex-wrap gap-1">
                       {Array.from(selectedDates).map(dateKey => (
                         <span key={dateKey} className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
@@ -542,23 +550,31 @@ const PhoneDutyScheduler = () => {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Employee Name</label>
+                    <label className="block text-sm font-medium mb-1">Imię i nazwisko pracownika</label>
                     <input
                       type="text"
                       value={employeeName}
                       onChange={(e) => setEmployeeName(e.target.value)}
                       className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter employee name"
+                      placeholder="Wpisz imię i nazwisko"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Phone Number</label>
+                    <label className="block text-sm font-medium mb-1">Numer telefonu</label>
                     <input
                       type="tel"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      onChange={(e) => {
+                        // Only allow digits
+                        const val = e.target.value.replace(/\D/g, '');
+                        setPhoneNumber(val);
+                      }}
                       className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter phone number"
+                      placeholder="Wpisz numer telefonu"
+                      maxLength={9}
+                      minLength={9}
+                      pattern="[0-9]{9}"
+                      required
                     />
                   </div>
                 </div>
@@ -568,7 +584,7 @@ const PhoneDutyScheduler = () => {
                     disabled={isLoading}
                     className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isLoading ? 'Saving...' : multiSelectMode ? `Save Schedule for ${selectedDates.size} Day${selectedDates.size !== 1 ? 's' : ''}` : 'Save Schedule'}
+                    {isLoading ? 'Zapisywanie...' : multiSelectMode ? `Zapisz grafik dla ${selectedDates.size} dni` : 'Zapisz grafik'}
                   </button>
                   {((multiSelectMode && Array.from(selectedDates).some(dateKey => schedules[dateKey])) || 
                     (!multiSelectMode && selectedDate && hasSchedule(selectedDate))) && (
@@ -577,14 +593,14 @@ const PhoneDutyScheduler = () => {
                       disabled={isLoading}
                       className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isLoading ? 'Deleting...' : multiSelectMode ? 'Delete Selected Schedules' : 'Delete Schedule'}
+                      {isLoading ? 'Usuwanie...' : multiSelectMode ? 'Usuń wybrane grafiki' : 'Usuń grafik'}
                     </button>
                   )}
                   <button
                     onClick={clearAllSelections}
                     className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors"
                   >
-                    Cancel
+                    Anuluj
                   </button>
                 </div>
               </div>
@@ -596,14 +612,14 @@ const PhoneDutyScheduler = () => {
             <div className="w-96 bg-gray-50 p-6 border-l">
               <div className="flex items-center space-x-2 mb-4">
                 <Settings className="h-5 w-5" />
-                <h3 className="font-semibold">API & Settings</h3>
+                <h3 className="font-semibold">API i Ustawienia</h3>
               </div>
 
               {/* Reminder Settings */}
               <div className="mb-6">
                 <h4 className="font-medium mb-3 flex items-center">
                   <Bell className="h-4 w-4 mr-2" />
-                  Reminder Settings
+                  Ustawienia przypomnień
                 </h4>
                 <div className="space-y-3">
                   <label className="flex items-center">
@@ -613,10 +629,10 @@ const PhoneDutyScheduler = () => {
                       onChange={(e) => setReminderSettings(prev => ({...prev, enabled: e.target.checked}))}
                       className="mr-2"
                     />
-                    Enable reminders
+                    Włącz przypomnienia
                   </label>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Hours before duty</label>
+                    <label className="block text-sm font-medium mb-1">Godzin przed dyżurem</label>
                     <input
                       type="number"
                       value={reminderSettings.hours_before}
@@ -627,7 +643,7 @@ const PhoneDutyScheduler = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Webhook URL</label>
+                    <label className="block text-sm font-medium mb-1">Adres webhooka</label>
                     <input
                       type="url"
                       value={reminderSettings.webhook_url}
@@ -641,30 +657,30 @@ const PhoneDutyScheduler = () => {
 
               {/* API Endpoints */}
               <div className="mb-6">
-                <h4 className="font-medium mb-3">API Endpoints</h4>
+                <h4 className="font-medium mb-3">Endpointy API</h4>
                 <div className="space-y-2 text-sm">
                   <div className="p-2 bg-white rounded border">
                     <code className="text-blue-600">GET /api/schedule/:date</code>
-                    <p className="text-gray-600 mt-1">Get schedule for specific date</p>
+                    <p className="text-gray-600 mt-1">Pobierz grafik na wybrany dzień</p>
                   </div>
                   <div className="p-2 bg-white rounded border">
                     <code className="text-green-600">POST /api/schedule</code>
-                    <p className="text-gray-600 mt-1">Create new schedule</p>
+                    <p className="text-gray-600 mt-1">Utwórz nowy grafik</p>
                   </div>
                   <div className="p-2 bg-white rounded border">
                     <code className="text-orange-600">PUT /api/schedule/:date</code>
-                    <p className="text-gray-600 mt-1">Update existing schedule</p>
+                    <p className="text-gray-600 mt-1">Aktualizuj istniejący grafik</p>
                   </div>
                   <div className="p-2 bg-white rounded border">
                     <code className="text-red-600">DELETE /api/schedule/:date</code>
-                    <p className="text-gray-600 mt-1">Delete schedule</p>
+                    <p className="text-gray-600 mt-1">Usuń grafik</p>
                   </div>
                 </div>
               </div>
 
               {/* Test API */}
               <div className="mb-6">
-                <h4 className="font-medium mb-3">Test API</h4>
+                <h4 className="font-medium mb-3">Testuj API</h4>
                 <div className="space-y-2">
                   <button
                     onClick={() => {
@@ -679,7 +695,7 @@ const PhoneDutyScheduler = () => {
                     className="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700 transition-colors text-sm"
                   >
                     <Eye className="h-4 w-4 inline mr-2" />
-                    Get Today's Schedule
+                    Pobierz dzisiejszy grafik
                   </button>
                   <button
                     onClick={() => {
@@ -692,7 +708,7 @@ const PhoneDutyScheduler = () => {
                     className="w-full bg-green-600 text-white p-2 rounded-md hover:bg-green-700 transition-colors text-sm"
                   >
                     <Users className="h-4 w-4 inline mr-2" />
-                    Get All Schedules
+                    Pobierz wszystkie grafiki
                   </button>
                   <button
                     onClick={() => {
@@ -709,7 +725,7 @@ const PhoneDutyScheduler = () => {
                     className="w-full bg-purple-600 text-white p-2 rounded-md hover:bg-purple-700 transition-colors text-sm"
                   >
                     <Send className="h-4 w-4 inline mr-2" />
-                    Send Test Reminder
+                    Wyślij testowe przypomnienie
                   </button>
                 </div>
               </div>
@@ -717,7 +733,7 @@ const PhoneDutyScheduler = () => {
               {/* API Response */}
               {apiResponse && (
                 <div>
-                  <h4 className="font-medium mb-2">API Response</h4>
+                  <h4 className="font-medium mb-2">Odpowiedź API</h4>
                   <pre className="bg-gray-900 text-green-400 p-3 rounded-md text-xs overflow-auto max-h-48">
                     {apiResponse}
                   </pre>

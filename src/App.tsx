@@ -97,7 +97,7 @@ function App() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">Ładowanie...</p>
         </div>
       </div>
     );
@@ -111,29 +111,29 @@ function App() {
     <div>
       <div className="bg-white shadow-sm border-b border-gray-200 px-4 py-2 flex justify-between items-center">
         <div className="flex items-center space-x-4">
-          <h1 className="text-lg font-semibold text-gray-900">Phone Duty Scheduler</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Dyżury Telefoniczne</h1>
           {currentUser && (
             <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <span>Welcome, {currentUser.full_name || currentUser.username}</span>
+              <span>Witaj, {currentUser.full_name || currentUser.username}</span>
               {currentUser.role === 'admin' && (
-                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">Admin</span>
+                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">Administrator</span>
               )}
             </div>
           )}
         </div>
         <div className="flex items-center space-x-4">
           <span className="text-xs text-gray-500">
-            Session expires in {formatTimeLeft(sessionTimeLeft)}
+            Sesja wygaśnie za {formatTimeLeft(sessionTimeLeft)}
           </span>
           <button
             onClick={handleLogout}
             className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
           >
-            Logout
+            Wyloguj
           </button>
         </div>
       </div>
-      <PhoneDutyScheduler />
+      <PhoneDutyScheduler currentUser={currentUser} />
     </div>
   );
 }
