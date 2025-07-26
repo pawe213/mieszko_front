@@ -366,7 +366,7 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNames = ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'];
 
   const days = generateCalendarDays();
 
