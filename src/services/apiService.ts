@@ -1,3 +1,7 @@
+export interface Employee {
+  name: string;
+  phone: string;
+}
 // API configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -49,6 +53,13 @@ export interface LoginResponse {
 }
 
 class ApiService {
+  // Employee operations
+  async addEmployee(employee: Employee): Promise<ApiResponse<Employee>> {
+    return this.request('/api/employees', {
+      method: 'POST',
+      body: JSON.stringify(employee),
+    });
+  }
   private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem('access_token');
     return {

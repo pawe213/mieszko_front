@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Phone, Bell, Users, Settings, Send, Eye, AlertCircle } from 'lucide-react';
 import { apiService, Schedule, ReminderSettings, User } from './services/apiService';
 
+interface Employee {
+  name: string;
+  phone: string;
+}
+
 interface PhoneDutySchedulerProps {
   currentUser?: User | null;
 }
@@ -23,6 +28,35 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
   const [apiResponse, setApiResponse] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
+
+  // Employee management state
+  const [showAddEmployee, setShowAddEmployee] = useState(false);
+  const [newEmployee, setNewEmployee] = useState<Employee>({ name: '', phone: '' });
+  const [employeeAddStatus, setEmployeeAddStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  // Add employee handler
+  const handleAddEmployee = async () => {
+    if (!newEmployee.name || !/^\d{9}$/.test(newEmployee.phone)) {
+      alert('Wprowadź poprawne dane pracownika (imię i nazwisko oraz 9-cyfrowy numer telefonu).');
+      return;
+    }
+    setEmployeeAddStatus('saving');
+    try {
+      // Assuming apiService.addEmployee exists and returns { success: boolean }
+      const response = await apiService.addEmployee(newEmployee);
+      if (response.success) {
+        setEmployeeAddStatus('success');
+        setTimeout(() => {
+          setShowAddEmployee(false);
+          setEmployeeAddStatus('idle');
+          setNewEmployee({ name: '', phone: '' });
+        }, 1000);
+      } else {
+        setEmployeeAddStatus('error');
+      }
+    } catch (e) {
+      setEmployeeAddStatus('error');
+    }
+  };
 
   // Load schedules from Firestore on component mount
   useEffect(() => {
@@ -405,19 +439,87 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
                    : 'Łączenie...'}
                 </span>
               </div>
-              
               {currentUser?.role === 'admin' && (
-                <button
-                  onClick={() => setShowApiPanel(!showApiPanel)}
-                  className="flex items-center space-x-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
-                >
-                  <Settings className="h-4 w-4" />
-                  <span>API i Ustawienia</span>
-                </button>
+                <>
+                  <button
+                    onClick={() => setShowApiPanel(!showApiPanel)}
+                    className="flex items-center space-x-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
+                  >
+                    <Settings className="h-4 w-4" />
+                    <span>API i Ustawienia</span>
+                  </button>
+                  <button
+                    onClick={() => setShowAddEmployee(true)}
+                    className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-colors text-white ml-2"
+                  >
+                    <Users className="h-4 w-4" />
+                    <span>Dodaj pracownika</span>
+                  </button>
+                </>
               )}
             </div>
           </div>
         </div>
+      {/* Add Employee Modal */}
+      {showAddEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-xl shadow-xl p-8 w-full max-w-md relative">
+            <button
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl"
+              onClick={() => { setShowAddEmployee(false); setEmployeeAddStatus('idle'); setNewEmployee({ name: '', phone: '' }); }}
+              aria-label="Zamknij"
+            >
+              ×
+            </button>
+            <h2 className="text-xl font-bold mb-4">Dodaj pracownika</h2>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Imię i nazwisko</label>
+              <input
+                type="text"
+                value={newEmployee.name}
+                onChange={e => setNewEmployee(emp => ({ ...emp, name: e.target.value }))}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Wpisz imię i nazwisko"
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Numer telefonu</label>
+              <input
+                type="tel"
+                value={newEmployee.phone}
+                onChange={e => setNewEmployee(emp => ({ ...emp, phone: e.target.value.replace(/\D/g, '') }))}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Wpisz numer telefonu"
+                maxLength={9}
+                minLength={9}
+                pattern="[0-9]{9}"
+                required
+              />
+            </div>
+            <div className="flex space-x-2 mt-4">
+              <button
+                onClick={handleAddEmployee}
+                disabled={employeeAddStatus === 'saving'}
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {employeeAddStatus === 'saving' ? 'Zapisywanie...' : 'Dodaj pracownika'}
+              </button>
+              <button
+                onClick={() => { setShowAddEmployee(false); setEmployeeAddStatus('idle'); setNewEmployee({ name: '', phone: '' }); }}
+                className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors"
+              >
+                Anuluj
+              </button>
+            </div>
+            {employeeAddStatus === 'success' && (
+              <div className="mt-3 text-green-700">Pracownik dodany!</div>
+            )}
+            {employeeAddStatus === 'error' && (
+              <div className="mt-3 text-red-700">Błąd podczas dodawania pracownika.</div>
+            )}
+          </div>
+        </div>
+      )}
 
         <div className="flex">
           {/* Calendar Section */}
