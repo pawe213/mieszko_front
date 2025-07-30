@@ -55,9 +55,12 @@ export interface LoginResponse {
 class ApiService {
   // Employee operations
   async addEmployee(employee: Employee): Promise<ApiResponse<Employee>> {
+    // Backend expects 'phone_number' instead of 'phone'
+    const payload = { ...employee, phone_number: employee.phone };
+    delete (payload as any).phone;
     return this.request('/api/employees', {
       method: 'POST',
-      body: JSON.stringify(employee),
+      body: JSON.stringify(payload),
     });
   }
   private getAuthHeaders(): HeadersInit {

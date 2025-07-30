@@ -439,8 +439,8 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
                    : 'Łączenie...'}
                 </span>
               </div>
-              {currentUser?.role === 'admin' && (
-                <>
+              <>
+                {currentUser?.role === 'admin' && (
                   <button
                     onClick={() => setShowApiPanel(!showApiPanel)}
                     className="flex items-center space-x-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
@@ -448,15 +448,15 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
                     <Settings className="h-4 w-4" />
                     <span>API i Ustawienia</span>
                   </button>
-                  <button
-                    onClick={() => setShowAddEmployee(true)}
-                    className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-colors text-white ml-2"
-                  >
-                    <Users className="h-4 w-4" />
-                    <span>Dodaj pracownika</span>
-                  </button>
-                </>
-              )}
+                )}
+                <button
+                  onClick={() => setShowAddEmployee(true)}
+                  className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-colors text-white ml-2"
+                >
+                  <Users className="h-4 w-4" />
+                  <span>Dodaj pracownika</span>
+                </button>
+              </>
             </div>
           </div>
         </div>
