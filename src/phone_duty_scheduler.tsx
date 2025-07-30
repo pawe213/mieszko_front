@@ -33,6 +33,31 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [newEmployee, setNewEmployee] = useState<Employee>({ name: '', phone: '' });
   const [employeeAddStatus, setEmployeeAddStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+  // Employee list for dropdown
+  const [employees, setEmployees] = useState<Array<{ id: string; name: string; phone: string }>>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+
+  // Fetch employees on mount
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const res = await apiService.getAllEmployees();
+        if (res.success && res.data) {
+          // Normalize phone field
+          const list = Object.values(res.data).map((emp: any) => ({
+            id: emp.id,
+            name: emp.name,
+            phone: emp.phone_number || emp.phone || ''
+          }));
+          setEmployees(list);
+        }
+      } catch (e) {
+        setEmployees([]);
+      }
+    };
+    fetchEmployees();
+  }, []);
   // Add employee handler
   const handleAddEmployee = async () => {
     if (!newEmployee.name || !/^\d{9}$/.test(newEmployee.phone)) {
@@ -172,7 +197,6 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
 
   const handleDateClick = (date: Date) => {
     const dateKey = formatDate(date);
-    
     if (multiSelectMode) {
       const newSelectedDates = new Set(selectedDates);
       if (newSelectedDates.has(dateKey)) {
@@ -181,11 +205,10 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
         newSelectedDates.add(dateKey);
       }
       setSelectedDates(newSelectedDates);
-      
-      // If no dates selected, clear form
       if (newSelectedDates.size === 0) {
         setPhoneNumber('');
         setEmployeeName('');
+        setSelectedEmployeeId('');
       }
     } else {
       setSelectedDate(date);
@@ -193,9 +216,13 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
       if (schedule) {
         setPhoneNumber(schedule.phone);
         setEmployeeName(schedule.name);
+        // Try to select the employee in the dropdown if exists
+        const found = employees.find(e => e.name === schedule.name && e.phone === schedule.phone);
+        setSelectedEmployeeId(found ? found.id : '');
       } else {
         setPhoneNumber('');
         setEmployeeName('');
+        setSelectedEmployeeId('');
       }
     }
   };
@@ -650,35 +677,30 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
                   </div>
                 )}
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Imię i nazwisko pracownika</label>
-                    <input
-                      type="text"
-                      value={employeeName}
-                      onChange={(e) => setEmployeeName(e.target.value)}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Wpisz imię i nazwisko"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Numer telefonu</label>
-                    <input
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => {
-                        // Only allow digits
-                        const val = e.target.value.replace(/\D/g, '');
-                        setPhoneNumber(val);
-                      }}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Wpisz numer telefonu"
-                      maxLength={9}
-                      minLength={9}
-                      pattern="[0-9]{9}"
-                      required
-                    />
-                  </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-1">Wybierz pracownika</label>
+                  <select
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={selectedEmployeeId}
+                    onChange={e => {
+                      setSelectedEmployeeId(e.target.value);
+                      const emp = employees.find(emp => emp.id === e.target.value);
+                      if (emp) {
+                        setEmployeeName(emp.name);
+                        setPhoneNumber(emp.phone);
+                      } else {
+                        setEmployeeName('');
+                        setPhoneNumber('');
+                      }
+                    }}
+                  >
+                    <option value="">-- Wybierz pracownika --</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.phone})
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="flex space-x-2 mt-4">
                   <button

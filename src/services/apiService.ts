@@ -63,6 +63,10 @@ class ApiService {
       body: JSON.stringify(payload),
     });
   }
+
+  async getAllEmployees(): Promise<ApiResponse<Record<string, Employee & { id: string; phone_number: string }>>> {
+    return this.request('/api/employees');
+  }
   private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem('access_token');
     return {
