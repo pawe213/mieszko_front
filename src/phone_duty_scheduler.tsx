@@ -449,10 +449,11 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
               {/* Info Button */}
               <button
                 onClick={() => setShowInfo(true)}
-                className="ml-4 flex items-center px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-colors"
+                className="ml-4 flex items-center px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-white text-base font-semibold transition-colors shadow-md"
+                style={{ fontSize: '1.1rem' }}
                 title="Informacja o zasadach użycia numerów"
               >
-                <AlertCircle className="h-5 w-5 mr-1" />
+                <AlertCircle className="h-6 w-6 mr-2" />
                 Info
               </button>
             </div>
