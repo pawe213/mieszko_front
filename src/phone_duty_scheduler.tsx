@@ -431,6 +431,9 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
 
   const days = generateCalendarDays();
 
+  // Info modal state
+  const [showInfo, setShowInfo] = useState(false);
+
   return (
     <div className="max-w-6xl mx-auto p-6 bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
       <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
@@ -443,6 +446,15 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
                 <h1 className="text-2xl font-bold">Dyżury Telefoniczne</h1>
                 <p className="text-blue-100">Zarządzaj przydziałami telefonów dyżurnych</p>
               </div>
+              {/* Info Button */}
+              <button
+                onClick={() => setShowInfo(true)}
+                className="ml-4 flex items-center px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-colors"
+                title="Informacja o zasadach użycia numerów"
+              >
+                <AlertCircle className="h-5 w-5 mr-1" />
+                Info
+              </button>
             </div>
             <div className="flex space-x-2">
               {/* Connection Status Indicator */}
@@ -487,6 +499,41 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
             </div>
           </div>
         </div>
+
+        {/* Info Modal */}
+        {showInfo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white rounded-xl shadow-xl p-8 w-full max-w-md relative">
+              <button
+                className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl"
+                onClick={() => setShowInfo(false)}
+                aria-label="Zamknij"
+              >
+                ×
+              </button>
+              <h2 className="text-xl font-bold mb-4 flex items-center"><AlertCircle className="h-6 w-6 mr-2 text-blue-600" />Informacja</h2>
+              <div className="text-gray-700 text-base leading-relaxed">
+                <p>
+                  <b>Jak wykorzystywane są numery telefonów dyżurnych?</b><br />
+                  Jeśli pracownik zostanie przypisany do dyżuru w środę, jego numer telefonu będzie obowiązywał <b>od środy godz. 15:00 do czwartku godz. 7:00</b>.<br />
+                  Oznacza to, że osoba przypisana do danego dnia pełni dyżur od godziny 15:00 tego dnia do godziny 7:00 dnia następnego.
+                </p>
+                <ul className="mt-3 list-disc pl-5 text-sm text-gray-600">
+                  <li>Przykład: Dyżur w środę = numer aktywny od środy 15:00 do czwartku 7:00.</li>
+                  <li>Numer telefonu jest używany do kontaktu w tym przedziale czasowym.</li>
+                </ul>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowInfo(false)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Zamknij
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       {/* Add Employee Modal */}
       {showAddEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
@@ -555,18 +602,24 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
             <div className="flex items-center justify-between mb-6">
               <button
                 onClick={() => navigateMonth(-1)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
+                aria-label="Poprzedni miesiąc"
               >
-                ←
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 font-bold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
               </button>
               <h2 className="text-xl font-semibold">
                 {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
               </h2>
               <button
                 onClick={() => navigateMonth(1)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
+                aria-label="Następny miesiąc"
               >
-                →
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 font-bold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
 
