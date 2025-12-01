@@ -34,28 +34,36 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
   const [newEmployee, setNewEmployee] = useState<Employee>({ name: '', phone: '' });
   const [employeeAddStatus, setEmployeeAddStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
+  // Employee editing state
+  const [showEditEmployee, setShowEditEmployee] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<{ id: string; name: string; phone: string } | null>(null);
+  const [employeeEditStatus, setEmployeeEditStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [showEmployeeList, setShowEmployeeList] = useState(false);
+
   // Employee list for dropdown
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; phone: string }>>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
 
+  // Fetch employees function
+  const fetchEmployees = async () => {
+    try {
+      const res = await apiService.getAllEmployees();
+      if (res.success && res.data) {
+        // Normalize phone field
+        const list = Object.values(res.data).map((emp: any) => ({
+          id: emp.id,
+          name: emp.name,
+          phone: emp.phone_number || emp.phone || ''
+        }));
+        setEmployees(list);
+      }
+    } catch (e) {
+      setEmployees([]);
+    }
+  };
+
   // Fetch employees on mount
   useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        const res = await apiService.getAllEmployees();
-        if (res.success && res.data) {
-          // Normalize phone field
-          const list = Object.values(res.data).map((emp: any) => ({
-            id: emp.id,
-            name: emp.name,
-            phone: emp.phone_number || emp.phone || ''
-          }));
-          setEmployees(list);
-        }
-      } catch (e) {
-        setEmployees([]);
-      }
-    };
     fetchEmployees();
   }, []);
   // Add employee handler
@@ -70,6 +78,8 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
       const response = await apiService.addEmployee(newEmployee);
       if (response.success) {
         setEmployeeAddStatus('success');
+        // Refresh employee list
+        await fetchEmployees();
         setTimeout(() => {
           setShowAddEmployee(false);
           setEmployeeAddStatus('idle');
@@ -80,6 +90,67 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
       }
     } catch (e) {
       setEmployeeAddStatus('error');
+    }
+  };
+
+  // Edit employee handler
+  const handleEditEmployee = (employee: { id: string; name: string; phone: string }) => {
+    setEditingEmployee(employee);
+    setShowEditEmployee(true);
+    setEmployeeEditStatus('idle');
+  };
+
+  // Update employee handler
+  const handleUpdateEmployee = async () => {
+    if (!editingEmployee || !editingEmployee.name || !/^\d{9}$/.test(editingEmployee.phone)) {
+      alert('Wprowadź poprawne dane pracownika (imię i nazwisko oraz 9-cyfrowy numer telefonu).');
+      return;
+    }
+    
+    setEmployeeEditStatus('saving');
+    try {
+      const response = await apiService.updateEmployee(editingEmployee.id, {
+        name: editingEmployee.name,
+        phone: editingEmployee.phone
+      });
+      if (response.success) {
+        setEmployeeEditStatus('success');
+        // Refresh employee list
+        await fetchEmployees();
+        setTimeout(() => {
+          setShowEditEmployee(false);
+          setEmployeeEditStatus('idle');
+          setEditingEmployee(null);
+        }, 1000);
+      } else {
+        setEmployeeEditStatus('error');
+      }
+    } catch (e: any) {
+      console.error('Error updating employee:', e);
+      if (e.message && e.message.includes('403')) {
+        alert('Wystąpił błąd uprawnień. Spróbuj ponownie lub skontaktuj się z administratorem.');
+      }
+      setEmployeeEditStatus('error');
+    }
+  };
+
+  // Delete employee handler
+  const handleDeleteEmployee = async (employee: { id: string; name: string; phone: string }) => {
+    const confirmDelete = window.confirm(`Czy na pewno chcesz usunąć pracownika "${employee.name}"?\nTa operacja jest nieodwracalna.`);
+    if (!confirmDelete) return;
+
+    try {
+      const response = await apiService.deleteEmployee(employee.id);
+      if (response.success) {
+        // Refresh employee list
+        await fetchEmployees();
+        alert(`Pracownik "${employee.name}" został usunięty.`);
+      } else {
+        alert('Błąd podczas usuwania pracownika.');
+      }
+    } catch (e: any) {
+      console.error('Error deleting employee:', e);
+      alert('Wystąpił błąd podczas usuwania pracownika.');
     }
   };
 
@@ -496,6 +567,15 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
                   <Users className="h-4 w-4" />
                   <span>Dodaj pracownika</span>
                 </button>
+                {currentUser && (
+                  <button
+                    onClick={() => setShowEmployeeList(!showEmployeeList)}
+                    className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors text-white ml-2"
+                  >
+                    <Users className="h-4 w-4" />
+                    <span>Lista pracowników</span>
+                  </button>
+                )}
               </>
             </div>
           </div>
@@ -535,7 +615,135 @@ const PhoneDutyScheduler: React.FC<PhoneDutySchedulerProps> = ({ currentUser }) 
             </div>
           </div>
         )}
-      {/* Add Employee Modal */}
+        {/* Employee List Modal */}
+        {showEmployeeList && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white rounded-xl shadow-xl p-8 w-full max-w-2xl relative max-h-96 overflow-y-auto">
+              <button
+                className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl"
+                onClick={() => setShowEmployeeList(false)}
+                aria-label="Zamknij"
+              >
+                ×
+              </button>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold flex items-center"><Users className="h-6 w-6 mr-2 text-blue-600" />Lista pracowników</h2>
+                <div className="flex flex-col items-end space-y-1">
+                  <span className="text-xs text-gray-500">
+                    Rola: <span className="font-medium">{currentUser?.role || 'brak'}</span> | Użytkownik: <span className="font-medium">{currentUser?.username || 'nieznany'}</span>
+                  </span>
+                  <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
+                    ✅ Możesz edytować pracowników
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {employees.length === 0 ? (
+                  <p className="text-gray-500 text-center py-4">Brak pracowników w systemie</p>
+                ) : (
+                  employees.map(employee => (
+                    <div key={employee.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <div className="font-medium">{employee.name}</div>
+                        <div className="text-sm text-gray-600">{employee.phone}</div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => {
+                            console.log('Edit button clicked for employee:', employee);
+                            console.log('Current user role:', currentUser?.role);
+                            handleEditEmployee(employee);
+                          }}
+                          className="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition-colors text-sm"
+                        >
+                          Edytuj
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEmployee(employee)}
+                          className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 transition-colors text-sm"
+                          title="Usuń pracownika"
+                        >
+                          Usuń
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowEmployeeList(false)}
+                  className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors"
+                >
+                  Zamknij
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Employee Modal */}
+        {showEditEmployee && editingEmployee && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white rounded-xl shadow-xl p-8 w-full max-w-md relative">
+              <button
+                className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl"
+                onClick={() => { setShowEditEmployee(false); setEmployeeEditStatus('idle'); setEditingEmployee(null); }}
+                aria-label="Zamknij"
+              >
+                ×
+              </button>
+              <h2 className="text-xl font-bold mb-4">Edytuj pracownika</h2>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Imię i nazwisko</label>
+                <input
+                  type="text"
+                  value={editingEmployee.name}
+                  onChange={e => setEditingEmployee(emp => emp ? { ...emp, name: e.target.value } : null)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Wpisz imię i nazwisko"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Numer telefonu</label>
+                <input
+                  type="tel"
+                  value={editingEmployee.phone}
+                  onChange={e => setEditingEmployee(emp => emp ? { ...emp, phone: e.target.value.replace(/\D/g, '') } : null)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Wpisz numer telefonu"
+                  maxLength={9}
+                  minLength={9}
+                  pattern="[0-9]{9}"
+                  required
+                />
+              </div>
+              <div className="flex space-x-2 mt-4">
+                <button
+                  onClick={handleUpdateEmployee}
+                  disabled={employeeEditStatus === 'saving'}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {employeeEditStatus === 'saving' ? 'Zapisywanie...' : 'Zaktualizuj pracownika'}
+                </button>
+                <button
+                  onClick={() => { setShowEditEmployee(false); setEmployeeEditStatus('idle'); setEditingEmployee(null); }}
+                  className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors"
+                >
+                  Anuluj
+                </button>
+              </div>
+              {employeeEditStatus === 'success' && (
+                <div className="mt-3 text-green-700">Pracownik zaktualizowany!</div>
+              )}
+              {employeeEditStatus === 'error' && (
+                <div className="mt-3 text-red-700">Błąd podczas aktualizacji pracownika.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Add Employee Modal */}
       {showAddEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
           <div className="bg-white rounded-xl shadow-xl p-8 w-full max-w-md relative">
