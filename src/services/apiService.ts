@@ -67,6 +67,22 @@ class ApiService {
   async getAllEmployees(): Promise<ApiResponse<Record<string, Employee & { id: string; phone_number: string }>>> {
     return this.request('/api/employees');
   }
+
+  async updateEmployee(employeeId: string, employee: Employee): Promise<ApiResponse<Employee>> {
+    // Backend expects 'phone_number' instead of 'phone'
+    const payload = { ...employee, phone_number: employee.phone };
+    delete (payload as any).phone;
+    return this.request(`/api/employees/${employeeId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteEmployee(employeeId: string): Promise<ApiResponse<{ id: string }>> {
+    return this.request(`/api/employees/${employeeId}`, {
+      method: 'DELETE',
+    });
+  }
   private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem('access_token');
     return {
